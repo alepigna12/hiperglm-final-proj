@@ -1,6 +1,6 @@
 #' @export
 hiper_glm <- function(design, outcome, model_name = "linear", option = list()) {
-  supported_model <- c("linear", "logit")
+  supported_model <- c("linear", "logit", "poisson")
   if (!(model_name %in% supported_model)) {
     stop(sprintf("The model %s is not supported.", model_name))
   }
@@ -22,11 +22,11 @@ find_mle <- function(model, option) {
       result <- solve_via_least_sq(model$design, model$outcome)
     } else {
       result <- solve_via_newton(
-        model$design, model$outcome, option$n_max_iter, option$rel_tol, option$abs_tol
+        model, option$n_max_iter, option$rel_tol, option$abs_tol
       )
     }
   } else {
-    result <- solve_via_optim(model$design, model$outcome, model$name, option$mle_solver)
+    result <- solve_via_optim(model, option$mle_solver)
   }
   return(result)
 }
@@ -42,19 +42,19 @@ solve_via_least_sq <- function(design, outcome) {
   return(list(coef = mle_coef, cov_est = cov_est))
 }
 
-solve_via_newton <- function(design, outcome, n_max_iter, rel_tol, abs_tol) {
+solve_via_newton <- function(model, n_max_iter, rel_tol, abs_tol) {
   if (is.null(n_max_iter)) { n_max_iter <- 25L }
   if (is.null(rel_tol)) { rel_tol <- 1e-6 }
   if (is.null(abs_tol)) { abs_tol <- 1e-6 }
-  coef_est <- rep(0, ncol(design))
+  model$reg_coef <- rep(0, ncol(design))
   n_iter <- 0L
   max_iter_reached <- FALSE
   converged <- FALSE
-  curr_loglik <- calc_logit_loglik(coef_est, design, outcome)
+  curr_loglik <- calc_loglik(model)
   while (!(converged || max_iter_reached)) {
     prev_loglik <- curr_loglik
-    coef_est <- take_one_newton_step(coef_est, design, outcome)
-    curr_loglik <- calc_logit_loglik(coef_est, design, outcome)
+    model <- take_one_newton_step(model)
+    curr_loglik <- calc_loglik(model)
     converged <- (
       2 * abs(curr_loglik - prev_loglik) < (abs_tol + rel_tol * abs(curr_loglik))
     )
@@ -64,7 +64,8 @@ solve_via_newton <- function(design, outcome, n_max_iter, rel_tol, abs_tol) {
   if (max_iter_reached && !converged) {
     warning("Newton's method did not converge. The estimates may be meaningless.")
   }
-  cov_est <- - calc_logit_hessian_inverse(coef_est, design, outcome)
+  coef_est <- model$reg_coef
+  cov_est <- - calc_logit_hessian_inverse(model)
   return(list(
     coef = coef_est, cov = cov_est, 
     converged = converged, n_iter = n_iter
@@ -72,44 +73,44 @@ solve_via_newton <- function(design, outcome, n_max_iter, rel_tol, abs_tol) {
 }
 
 take_one_newton_step <- function(
-    coef_est, design, outcome, solver = "weighted-leqst-sq"
+    model, solver = "weighted-leqst-sq"
 ) {
   if (solver == "weighted-leqst-sq") {
     loglink_grad <- 
-      calc_logit_loglink_deriv(coef_est, design, outcome, order = 1)
-    weight <- calc_logit_loglink_deriv(coef_est, design, outcome, order = 2)
+      calc_loglink_deriv(model, order = 1)
+    weight <- calc_loglink_deriv(model, order = 2)
     if (any(weight == 0)) {
       stop("Exact 0 or 1 found in predicted probability while solving for MLE.")
         # TODO: pursue alternative path forward in this case. Maybe just fall 
         # back on a Newton step with explicit computation of weighted Hessian. 
     }
     ls_target_vec <- loglink_grad / weight
-    coef_update <- solve_least_sq_via_qr(design, ls_target_vec, weight)$solution
+    coef_update <- solve_least_sq_via_qr(model$design, ls_target_vec, weight)$solution
   } else {
-    grad <- calc_logit_grad(coef_est, design, outcome)
-    hess <- calc_logit_hessian(coef_est, design, outcome)
+    grad <- calc_grad(model)
+    hess <- calc_logit_hessian(model)
     coef_update <- - solve(hess, grad)
   }
-  coef_est <- coef_est + coef_update
-  return(coef_est = coef_est)
+  model$reg_coef <- model$reg_coef + coef_update
+  return(model = model)
 }
 
-solve_via_optim <- function(design, outcome, model_name, method) {
+solve_via_optim <- function(model, method) {
   init_coef <- rep(0, ncol(design))
-  if (model_name == 'linear') {
-    obj_fn <- function (coef) {
-      calc_linear_loglik(coef, design, outcome) 
-    }
+  if (model$name == 'linear') {
     obj_grad <- function (coef) {
-      calc_linear_grad(coef, design, outcome)
+      model$reg_coef = coef
+      calc_grad(model, noise_var = 1)
     }
   } else {
-    obj_fn <- function (coef) {
-      calc_logit_loglik(coef, design, outcome) 
-    }
     obj_grad <- function (coef) {
-      calc_logit_grad(coef, design, outcome)
+      model$reg_coef = coef
+      calc_grad(model)
     }
+  }
+  obj_fn <- function (coef) {
+    model$reg_coef = coef
+    return(calc_loglik(model)) 
   }
   optim_result <- stats::optim(
     init_coef, obj_fn, obj_grad, method = method,
