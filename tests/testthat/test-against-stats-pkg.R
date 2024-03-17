@@ -43,7 +43,7 @@ test_that("`hglm` logit model est coincides with `glm` one for binomial outcome"
   ))
 })
 
-test_that("`hglm` logit model est coincides with `glm` one", {
+test_that("`hglm` poisson model est coincides with `glm` one", {
   data <- simulate_data(32, 4, model_name = 'poisson', seed = 1918)
   design <- data$design; outcome <- data$outcome
   glm_out <- stats::glm(outcome ~ design + 0, family = poisson)
