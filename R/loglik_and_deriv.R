@@ -34,16 +34,8 @@ calc_loglik.poisson_model <- function(model){
   design = model$design
   reg_coef = model$reg_coef
   outcome = model$outcome
-  if (is.list(outcome)) {
-    n_success <- outcome$n_success
-    n_trial <- outcome$n_trial
-  } else {
-    n_success <- outcome
-    n_trial <- rep(1, length(n_success)) # Assume binary outcome
-  }
-  logit_prob <- design %*% reg_coef
-  loglik <- sum(n_success * logit_prob - n_trial * log(1 + exp(logit_prob)))
-  # TODO: improve numerical stability for logit_prob >> 1
+  nu <- design %*% reg_coef
+  loglik <- sum(outcome * nu - exp(nu))
   return(loglik)
 }
 
@@ -85,6 +77,22 @@ calc_loglink_deriv.logit_model <- function(model, order) {
     deriv <- n_success - n_trial * predicted_prob
   } else if (order == 2) {
     deriv <- n_trial * predicted_prob * (1 - predicted_prob)
+  } else {
+    stop("3rd+ order derivative calculations are not supported")
+  }
+  deriv <- as.vector(deriv)
+  return(deriv)
+}
+
+calc_loglink_deriv.poisson_model <- function(model, order) {
+  design = model$design
+  reg_coef = model$reg_coef
+  outcome = model$outcome
+  lambda <- as.vector(exp(design %*% reg_coef))
+  if (order == 1) {
+    deriv <- outcome - lambda
+  } else if (order == 2) {
+    deriv <- lambda
   } else {
     stop("3rd+ order derivative calculations are not supported")
   }

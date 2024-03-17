@@ -45,7 +45,6 @@ test_that("logit model's analytical gradient is close to numerical one", {
 })
 
 test_that("poisson model's analytical gradient is close to numerical one", {
-  skip_if_not(Sys.getenv("MANUAL_TEST") != "")
   expect_true(
     compare_anlytical_and_numerical_grad("poisson")
   )
