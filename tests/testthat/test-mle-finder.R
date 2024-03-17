@@ -24,6 +24,13 @@ test_that("newton and bfgs outputs coincide on logit model", {
   ))
 })
 
+test_that("newton and bfgs outputs coincide on poisson model", {
+  out <- get_default_and_bfgs_optimizer_outputs("poisson")
+  expect_true(are_all_close(
+    coef(out$via_default), coef(out$via_bfgs), abs_tol = 1e-2, rel_tol = 1e-2
+  ))
+})
+
 test_that("vanilla/weighted least-sq Newton updates coincide", {
   n_obs <- 32; n_pred <- 4
   data <- simulate_data(n_obs, n_pred, model_name = 'logit', seed = 1918)
