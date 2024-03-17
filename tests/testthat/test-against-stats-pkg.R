@@ -42,3 +42,15 @@ test_that("`hglm` logit model est coincides with `glm` one for binomial outcome"
     abs_tol = Inf, rel_tol = 1e-3
   ))
 })
+
+test_that("`hglm` logit model est coincides with `glm` one", {
+  data <- simulate_data(32, 4, model_name = 'poisson', seed = 1918)
+  design <- data$design; outcome <- data$outcome
+  glm_out <- stats::glm(outcome ~ design + 0, family = poisson)
+  hglm_out <- hiper_glm(design, outcome, model_name = 'poisson')
+  expect_true(are_all_close(coef(hglm_out), coef(glm_out)))
+  expect_true(are_all_close(
+    as.vector(vcov(hglm_out)), as.vector(vcov(glm_out)), 
+    abs_tol = Inf, rel_tol = 1e-3
+  ))
+})
