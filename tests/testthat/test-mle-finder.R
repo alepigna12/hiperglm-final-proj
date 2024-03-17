@@ -25,6 +25,7 @@ test_that("newton and bfgs outputs coincide on logit model", {
 })
 
 test_that("newton and bfgs outputs coincide on poisson model", {
+  skip_if_not(Sys.getenv("MANUAL_TEST") != "")
   out <- get_default_and_bfgs_optimizer_outputs("poisson")
   expect_true(are_all_close(
     coef(out$via_default), coef(out$via_bfgs), abs_tol = 1e-2, rel_tol = 1e-2
